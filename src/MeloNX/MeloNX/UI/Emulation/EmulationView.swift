@@ -68,12 +68,7 @@ struct EmulationView: View {
     private var air = Air.shared
     
     @State var isConnected = false
-
-    // The memberwise initializer is private because of the private stored properties above.
-    init(game: GameInfo) {
-        self.game = game
-    }
-
+    
     @ViewBuilder
     func emulationView(_ airplay: Bool = false) -> some View {
         if airplay { MetalViewRepresentable(showView: true).ignoresSafeArea().frame(maxWidth: .infinity, maxHeight: .infinity) } else {
