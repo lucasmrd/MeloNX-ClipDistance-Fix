@@ -1,0 +1,86 @@
+name: iOS unsigned IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-unsigned-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  XCODE_PROJECT: src/MeloNX/MeloNX.xcodeproj
+  XCODE_SCHEME: MeloNX
+  XCODE_CONFIGURATION: Release
+  DERIVED_DATA_PATH: build/DerivedData
+  IPA_OUTPUT_DIR: build/ipa
+
+jobs:
+  build:
+    name: Build unsigned IPA
+    runs-on: macos-26
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          set -euo pipefail
+          xcode="$(find /Applications -maxdepth 1 -name 'Xcode*.app' -print | sort -V | tail -n 1)"
+          sudo xcode-select -s "$xcode/Contents/Developer"
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i iphoneos
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install .NET iOS workload
+        run: dotnet workload install ios
+
+      - name: Build unsigned app
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration "$XCODE_CONFIGURATION" \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath "$DERIVED_DATA_PATH" \
+            build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            ONLY_ACTIVE_ARCH=NO
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          app="$(find "$DERIVED_DATA_PATH/Build/Products/${XCODE_CONFIGURATION}-iphoneos" -maxdepth 1 -name '*.app' -type d -print -quit)"
+          test -n "$app"
+          ls -la "$app" "$app/Frameworks" || true
+          test -f "$app/Frameworks/Ryujinx.Library.dylib" || find "$app" -name 'Ryujinx.Library.dylib' | grep -q .
+          mkdir -p "$IPA_OUTPUT_DIR/Payload"
+          ditto "$app" "$IPA_OUTPUT_DIR/Payload/$(basename "$app")"
+          cp src/MeloNX/MeloNX/MeloNX.entitlements "$IPA_OUTPUT_DIR/MeloNX.entitlements"
+          (cd "$IPA_OUTPUT_DIR" && zip -qry MeloNX-unsigned.ipa Payload)
+          du -sh "$IPA_OUTPUT_DIR/MeloNX-unsigned.ipa"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" -c "Print :CFBundleShortVersionString" "$app/Info.plist"
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: MeloNX-unsigned-ipa
+          path: |
+            ${{ env.IPA_OUTPUT_DIR }}/MeloNX-unsigned.ipa
+            ${{ env.IPA_OUTPUT_DIR }}/MeloNX.entitlements
+          if-no-files-found: error
