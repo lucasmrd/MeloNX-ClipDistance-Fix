@@ -89,6 +89,7 @@ namespace Ryujinx.Graphics.Shader.Translation.Transforms
                         else
                         {
                             context.GpuAccessor.Log($"Invalid output \"{(IoVariable)operation.GetSource(0).Value}\".");
+                            newNode = VertexToCompute.DiscardOutputAccess(node, operation);
                         }
                     }
 
@@ -109,6 +110,7 @@ namespace Ryujinx.Graphics.Shader.Translation.Transforms
                         else
                         {
                             context.GpuAccessor.Log($"Invalid output \"{(IoVariable)operation.GetSource(0).Value}\".");
+                            newNode = VertexToCompute.DiscardOutputAccess(node, operation);
                         }
                     }
 

@@ -126,6 +126,7 @@ namespace Ryujinx.Graphics.Shader.Translation.Transforms
                 else
                 {
                     context.GpuAccessor.Log($"Invalid output \"{(IoVariable)operation.GetSource(0).Value}\".");
+                    newNode = DiscardOutputAccess(node, operation);
                 }
             }
             else if (operation.Inst == Instruction.Store && operation.StorageKind == StorageKind.Output)
@@ -143,6 +144,7 @@ namespace Ryujinx.Graphics.Shader.Translation.Transforms
                 else
                 {
                     context.GpuAccessor.Log($"Invalid output \"{(IoVariable)operation.GetSource(0).Value}\".");
+                    newNode = DiscardOutputAccess(node, operation);
                 }
             }
 
@@ -152,6 +154,20 @@ namespace Ryujinx.Graphics.Shader.Translation.Transforms
             }
 
             return newNode;
+        }
+
+        /// <summary>
+        /// Replaces an access to an output that has no slot in the vertex data reserved for vertex-as-compute
+        /// (for example a clip distance the shader writes but its header does not declare as written).
+        /// Such outputs are ignored by the hardware, so the store is dropped and a load reads zero.
+        /// Leaving the original operation in place makes the SPIR-V backend look up an output variable
+        /// that a compute shader never declares, which throws a KeyNotFoundException.
+        /// </summary>
+        internal static LinkedListNode<INode> DiscardOutputAccess(LinkedListNode<INode> node, Operation operation)
+        {
+            Operand dest = operation.Inst == Instruction.Load ? operation.Dest : Local();
+
+            return node.List.AddBefore(node, new Operation(Instruction.Copy, dest, Const(0)));
         }
 
         private static Operand GenerateVertexOffset(ResourceManager resourceManager, LinkedListNode<INode> node, int location, int component)
